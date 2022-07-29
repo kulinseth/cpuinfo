@@ -128,7 +128,7 @@ static enum cpuinfo_uarch decode_uarch(uint32_t cpu_family, uint32_t cpu_subtype
 	#endif
 }
 
-static void decode_package_name(char* package_name) {
+static void decode_hw_machine_package_name(char* package_name) {
 	size_t size;
 	if (sysctlbyname("hw.machine", NULL, &size, NULL, 0) != 0) {
 		cpuinfo_log_warning("sysctlbyname(\"hw.machine\") failed: %s", strerror(errno));
@@ -252,6 +252,29 @@ static void decode_package_name(char* package_name) {
 	}
 }
 
+static void read_package_name(char* package_name) {
+	decode_hw_machine_package_name(package_name);
+	if (package_name[0] != '\0') {
+		return;
+	}
+
+	/* Try to pull package name from machdep.cpu.brand_string */
+	size_t size;
+	if (sysctlbyname("machdep.cpu.brand_string", NULL, &size, NULL, 0) != 0) {
+		cpuinfo_log_warning("sysctlbyname(\"machdep.cpu.brand_string\") failed: %s", strerror(errno));
+		return;
+	}
+
+	char *brand_string = alloca(size);
+	if (sysctlbyname("machdep.cpu.brand_string", brand_string, &size, NULL, 0) != 0) {
+		cpuinfo_log_warning("sysctlbyname(\"machdep.cpu.brand_string\") failed: %s", strerror(errno));
+		return;
+	}
+	cpuinfo_log_debug("machdep.cpu.brand_string: %s", brand_string);
+
+	strlcpy(package_name, brand_string, CPUINFO_PACKAGE_NAME_MAX);
+}
+
 void cpuinfo_arm_mach_init(void) {
 	struct cpuinfo_processor* processors = NULL;
 	struct cpuinfo_core* cores = NULL;
@@ -294,7 +317,7 @@ void cpuinfo_arm_mach_init(void) {
 			.core_start = i * cores_per_package,
 			.core_count = cores_per_package,
 		};
-		decode_package_name(packages[i].name);
+		read_package_name(packages[i].name);
 	}
 
 
